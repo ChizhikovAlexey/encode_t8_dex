@@ -9,8 +9,40 @@ pub fn handler(ctx: Context<AddLiquidity>, amount_a: u64, amount_b: u64) -> Resu
         return err!(ErrorCode::ZeroAmount);
     }
 
-    // TODO: more logic to determine lp amount to mint
-    let lp_amount_to_mint = amount_a;
+    let lp_amount_to_mint: u64;
+
+    // Vault balances
+    let vault_a_balance = ctx.accounts.token_vault_a.amount;
+    let vault_b_balance = ctx.accounts.token_vault_b.amount;
+    let lp_mint_supply = ctx.accounts.lp_mint.supply;
+
+    // Check if there is any liquidity in the pool
+    if lp_mint_supply == 0 {
+        // No liquidity
+        // lp_amount_to_mint = sqrt(amount_a * amount_b)
+        // (UniswapV2 does this for protection from price manipulation attack)
+        lp_amount_to_mint = (amount_a as u128 * amount_b as u128)
+            .isqrt()
+            .try_into()?;
+
+        if lp_amount_to_mint == 0 {
+            return err!(ErrorCode::ZeroAmount);
+        }
+
+    } else {
+        // There is some liquidity
+        // We have to check the proportion is correct
+        // required_b = amount_a * vault_b_balance / vault_a_balance
+        let required_b = (amount_a as u128 * vault_b_balance as u128) / vault_a_balance as u128;
+
+        if required_b != amount_b as u128 {
+            return err!(ErrorCode::InvalidRatio);
+        }
+
+        // lp_to_mint = amount_a * lp_mint_supply / vault_a_balance
+        lp_amount_to_mint = ((amount_a as u128 * lp_mint_supply as u128) / vault_a_balance as u128)
+            .try_into()?;
+    }
 
     // Transfer tokens from user to vaults
     token::transfer(ctx.accounts.transfer_a_context(), amount_a)?;

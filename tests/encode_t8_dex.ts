@@ -36,7 +36,6 @@ describe("encode_t8_dex", () => {
     let userTokenAccountA: anchor.web3.PublicKey;
     let userTokenAccountB: anchor.web3.PublicKey;
     let poolPda: anchor.web3.PublicKey;
-    let lpMintPda: anchor.web3.PublicKey;
 
     // --- 1. TEST `initialize_pool` ---
     it("Initializes a new liquidity pool", async () => {
@@ -44,21 +43,18 @@ describe("encode_t8_dex", () => {
         await createMint(provider.connection, payer.payer, payer.publicKey, null, 6, mintA_KP);
         await createMint(provider.connection, payer.payer, payer.publicKey, null, 6, mintB_KP);
 
-        // Find the PDA addresses for the pool and its LP mint.
         [poolPda] = anchor.web3.PublicKey.findProgramAddressSync(
             [Buffer.from("pool"), mintA.toBuffer(), mintB.toBuffer()],
             program.programId
         );
-        [lpMintPda] = anchor.web3.PublicKey.findProgramAddressSync(
+        const [lpMintPda] = anchor.web3.PublicKey.findProgramAddressSync(
             [Buffer.from("lp_mint"), mintA.toBuffer(), mintB.toBuffer()],
             program.programId
         );
 
-        // Generate keypairs for the token vaults, as they are initialized in the instruction.
         const tokenVaultA_KP = anchor.web3.Keypair.generate();
         const tokenVaultB_KP = anchor.web3.Keypair.generate();
 
-        // Invoke the `initializePool` instruction.
         await program.methods
             .initializePool()
             .accounts({
@@ -75,34 +71,26 @@ describe("encode_t8_dex", () => {
             .signers([tokenVaultA_KP, tokenVaultB_KP])
             .rpc();
 
-        // Assert that the pool account was created.
         const poolAccount = await program.account.pool.fetch(poolPda);
         assert.ok(poolAccount, "Pool account should exist after initialization.");
     });
 
-    // --- 2. TEST `add_liquidity` ---
-    it("Adds liquidity to the pool", async () => {
+    // --- 2. TEST `add_liquidity` (First Depositor) ---
+    it("Adds the initial liquidity to the pool", async () => {
         // --- Setup ---
-        // Create and fund the user's token accounts.
         userTokenAccountA = await createAssociatedTokenAccount(provider.connection, payer.payer, mintA, payer.publicKey);
         userTokenAccountB = await createAssociatedTokenAccount(provider.connection, payer.payer, mintB, payer.publicKey);
 
-        await mintTo(provider.connection, payer.payer, mintA, userTokenAccountA, payer.payer, 1_000_000_000); // 1000 Token A
-        await mintTo(provider.connection, payer.payer, mintB, userTokenAccountB, payer.payer, 1_000_000_000); // 1000 Token B
+        await mintTo(provider.connection, payer.payer, mintA, userTokenAccountA, payer.payer, 200_000_000); // 200 Token A
+        await mintTo(provider.connection, payer.payer, mintB, userTokenAccountB, payer.payer, 200_000_000); // 200 Token B
 
-        const amountA = new anchor.BN(100_000_000); // 100 tokens A
-        const amountB = new anchor.BN(200_000_000); // 200 tokens B
+        const amountA = new anchor.BN(100_000_000); // Deposit 100 tokens A
+        const amountB = new anchor.BN(100_000_000); // Deposit 100 tokens B
 
-        // Fetch the pool state created in the previous test.
         const poolAccount = await program.account.pool.fetch(poolPda);
-
-        // Find the user's associated token account address for the LP token.
         const userLpTokenAccount = await getAssociatedTokenAddress(poolAccount.lpMint, payer.publicKey);
 
-        const userA_before = await getAccount(provider.connection, userTokenAccountA);
-
         // --- Action ---
-        // Invoke the `addLiquidity` instruction.
         await program.methods.addLiquidity(amountA, amountB).accounts({
             pool: poolPda,
             mintA: poolAccount.mintA,
@@ -120,19 +108,52 @@ describe("encode_t8_dex", () => {
         }).rpc();
 
         // --- Assertions ---
+        const userLp_after = await getAccount(provider.connection, userLpTokenAccount);
+        // Expected LP tokens = sqrt(100e6 * 100e6) = 100e6
+        const expectedLpAmount = new anchor.BN(100_000_000);
+        assert.ok(new anchor.BN(userLp_after.amount).eq(expectedLpAmount), `LP amount should be ${expectedLpAmount}`);
+    });
+
+    // --- 3. TEST `add_liquidity` (Second Depositor) ---
+    it("Adds more liquidity, respecting the pool ratio", async () => {
+        // --- Setup ---
+        // Pool now has 100 A and 100 B, so the ratio is 1:1.
+        // We will deposit 50 A and 50 B.
+        const amountA = new anchor.BN(50_000_000); // 50 tokens A
+        const amountB = new anchor.BN(50_000_000); // 50 tokens B
+
+        const poolAccount = await program.account.pool.fetch(poolPda);
+        const userLpTokenAccount = await getAssociatedTokenAddress(poolAccount.lpMint, payer.publicKey);
+
+        // --- Action ---
+        await program.methods.addLiquidity(amountA, amountB).accounts({
+            pool: poolPda,
+            mintA: poolAccount.mintA,
+            mintB: poolAccount.mintB,
+            tokenVaultA: poolAccount.tokenVaultA,
+            tokenVaultB: poolAccount.tokenVaultB,
+            lpMint: poolAccount.lpMint,
+            user: payer.publicKey,
+            userTokenAccountA: userTokenAccountA,
+            userTokenAccountB: userTokenAccountB,
+            userLpTokenAccount: userLpTokenAccount,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+            systemProgram: anchor.web3.SystemProgram.programId,
+        }).rpc();
+
+        // --- Assertions ---
+        // Vaults had 100 A and 100 B. Now they should have 150 A and 150 B.
         const vaultA_after = await getAccount(provider.connection, poolAccount.tokenVaultA);
         const vaultB_after = await getAccount(provider.connection, poolAccount.tokenVaultB);
-        const userA_after = await getAccount(provider.connection, userTokenAccountA);
+        assert.equal(Number(vaultA_after.amount), 150_000_000);
+        assert.equal(Number(vaultB_after.amount), 150_000_000);
+
         const userLp_after = await getAccount(provider.connection, userLpTokenAccount);
-
-        // 1. Vault balances should increase by the deposited amounts.
-        assert.equal(Number(vaultA_after.amount), amountA.toNumber(), "Vault A balance is incorrect");
-        assert.equal(Number(vaultB_after.amount), amountB.toNumber(), "Vault B balance is incorrect");
-        // 2. User's token A balance should decrease.
-        assert.equal(Number(userA_before.amount) - Number(userA_after.amount), amountA.toNumber(), "User A balance change is incorrect");
-        // 3. User should receive LP tokens (current logic: amount = amount_a).
-        assert.equal(Number(userLp_after.amount), amountA.toNumber(), "User LP token balance is incorrect");
-
-        console.log("Liquidity added successfully!");
+        // Previous LP total = 100e6.
+        // LP to mint = amount_a * lp_supply / vault_a_balance = 50e6 * 100e6 / 100e6 = 50e6.
+        // Total user LP = 100e6 (from first deposit) + 50e6 (from second) = 150e6.
+        const expectedLpTotal = new anchor.BN(150_000_000);
+        assert.ok(new anchor.BN(userLp_after.amount).eq(expectedLpTotal), `Total LP should be ${expectedLpTotal}`);
     });
 });
