@@ -40,6 +40,8 @@ pub struct InitializePool<'info> {
     #[account(
         init,
         payer = payer,
+        seeds = [b"lp_mint", pool.key().as_ref()],
+        bump,
         mint::decimals = 6,
         mint::authority = pool
     )]
