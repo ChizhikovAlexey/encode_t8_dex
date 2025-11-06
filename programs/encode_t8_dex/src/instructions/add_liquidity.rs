@@ -1,5 +1,4 @@
 use crate::errors::ErrorCode;
-
 use crate::state::Pool;
 use anchor_lang::prelude::*;
 use anchor_spl::associated_token::AssociatedToken;
@@ -13,10 +12,27 @@ pub fn handler(ctx: Context<AddLiquidity>, amount_a: u64, amount_b: u64) -> Resu
     // TODO: more logic to determine lp amount to mint
     let lp_amount_to_mint = amount_a;
 
+    // Transfer tokens from user to vaults
     token::transfer(ctx.accounts.transfer_a_context(), amount_a)?;
     token::transfer(ctx.accounts.transfer_b_context(), amount_b)?;
 
-    token::mint_to(ctx.accounts.mint_lp_context(), lp_amount_to_mint)?;
+    let seeds = &[
+        b"pool",
+        ctx.accounts.mint_a.to_account_info().key.as_ref(),
+        ctx.accounts.mint_b.to_account_info().key.as_ref(),
+        &[ctx.accounts.pool.bump],
+    ];
+    let signer = &[&seeds[..]];
+
+    let cpi_accounts = MintTo {
+        mint: ctx.accounts.lp_mint.to_account_info(),
+        to: ctx.accounts.user_lp_token_account.to_account_info(),
+        authority: ctx.accounts.pool.to_account_info(),
+    };
+    let cpi_program = ctx.accounts.token_program.to_account_info();
+    let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer);
+
+    token::mint_to(cpi_ctx, lp_amount_to_mint)?;
 
     msg!(
         "Liquidity added: {} of token A, {} of token B.",
@@ -30,11 +46,18 @@ pub fn handler(ctx: Context<AddLiquidity>, amount_a: u64, amount_b: u64) -> Resu
 
 #[derive(Accounts)]
 pub struct AddLiquidity<'info> {
+    // check PDA
     #[account(
-        seeds = [b"pool", pool.mint_a.as_ref(), pool.mint_b.as_ref()],
+        seeds = [b"pool", mint_a.key().as_ref(), mint_b.key().as_ref()],
         bump = pool.bump
     )]
     pub pool: Account<'info, Pool>,
+
+    // mint_a and mint_b are required to check pool PDA
+    #[account(address = pool.mint_a)]
+    pub mint_a: Account<'info, Mint>,
+    #[account(address = pool.mint_b)]
+    pub mint_b: Account<'info, Mint>,
 
     #[account(
         mut,
@@ -58,9 +81,15 @@ pub struct AddLiquidity<'info> {
     pub user: Signer<'info>,
 
     // User token accounts
-    #[account(mut)]
+    #[account(
+        mut,
+        token::mint = mint_a // check that this vault is for mint_a token
+    )]
     pub user_token_account_a: Account<'info, TokenAccount>,
-    #[account(mut)]
+    #[account(
+        mut,
+        token::mint = mint_b
+    )]
     pub user_token_account_b: Account<'info, TokenAccount>,
 
     // User token account for LP tokens
@@ -97,17 +126,6 @@ impl<'info> AddLiquidity<'info> {
                 from: self.user_token_account_b.to_account_info(),
                 to: self.token_vault_b.to_account_info(),
                 authority: self.user.to_account_info(),
-            },
-        )
-    }
-
-    pub fn mint_lp_context(&self) -> CpiContext<'_, '_, '_, 'info, MintTo<'info>> {
-        CpiContext::new(
-            self.token_program.to_account_info(),
-            MintTo {
-                mint: self.lp_mint.to_account_info(),
-                to: self.user_lp_token_account.to_account_info(),
-                authority: self.pool.to_account_info(),
             },
         )
     }
