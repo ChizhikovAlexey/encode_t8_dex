@@ -18,4 +18,8 @@ pub mod encode_t8_dex {
     pub fn add_liquidity(ctx: Context<AddLiquidity>, amount_a: u64, amount_b: u64) -> Result<()> {
         add_liquidity::handler(ctx, amount_a, amount_b)
     }
+
+    pub fn remove_liquidity(ctx: Context<RemoveLiquidity>, lp_amount: u64) -> Result<()> {
+        remove_liquidity::handler(ctx, lp_amount)
+    }
 }

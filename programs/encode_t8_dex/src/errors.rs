@@ -6,4 +6,12 @@ pub enum ErrorCode {
     ZeroAmount,
     #[msg("Deposited token amounts do not match the pool ratio.")]
     InvalidRatio,
+    #[msg("Insufficient liquidity in the pool.")]
+    InsufficientLiquidity,
+    #[msg("Insufficient LP tokens to perform this operation.")]
+    InsufficientLpTokens,
+    #[msg("Calculation overflow occurred.")]
+    CalculationOverflow,
+    #[msg("Withdrawn token amounts would be zero.")]
+    ZeroWithdrawAmount,
 }

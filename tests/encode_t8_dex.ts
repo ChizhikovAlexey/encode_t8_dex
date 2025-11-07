@@ -8,152 +8,329 @@ import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { EncodeT8Dex } from "../target/types/encode_t8_dex";
 import {
-    TOKEN_PROGRAM_ID,
-    ASSOCIATED_TOKEN_PROGRAM_ID,
-    createMint,
-    createAssociatedTokenAccount,
-    mintTo,
-    getAccount,
-    getAssociatedTokenAddress,
+  TOKEN_PROGRAM_ID,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+  createMint,
+  createAssociatedTokenAccount,
+  mintTo,
+  getAccount,
+  getAssociatedTokenAddress,
 } from "@solana/spl-token";
 import { assert } from "chai";
 
 describe("encode_t8_dex", () => {
-    // Configure the client to use the local cluster.
-    const provider = anchor.AnchorProvider.env();
-    anchor.setProvider(provider);
+  // Configure the client to use the local cluster.
+  const provider = anchor.AnchorProvider.env();
+  anchor.setProvider(provider);
 
-    const program = anchor.workspace.EncodeT8Dex as Program<EncodeT8Dex>;
-    const payer = provider.wallet as anchor.Wallet;
+  const program = anchor.workspace.EncodeT8Dex as Program<EncodeT8Dex>;
+  const payer = provider.wallet as anchor.Wallet;
 
-    // Keypairs for the two tokens in the pool.
-    const mintA_KP = anchor.web3.Keypair.generate();
-    const mintB_KP = anchor.web3.Keypair.generate();
-    const mintA = mintA_KP.publicKey;
-    const mintB = mintB_KP.publicKey;
+  // Keypairs for the two tokens in the pool.
+  const mintA_KP = anchor.web3.Keypair.generate();
+  const mintB_KP = anchor.web3.Keypair.generate();
+  const mintA = mintA_KP.publicKey;
+  const mintB = mintB_KP.publicKey;
 
-    // Variables to store addresses, accessible across tests.
-    let userTokenAccountA: anchor.web3.PublicKey;
-    let userTokenAccountB: anchor.web3.PublicKey;
-    let poolPda: anchor.web3.PublicKey;
+  // Variables to store addresses, accessible across tests.
+  let userTokenAccountA: anchor.web3.PublicKey;
+  let userTokenAccountB: anchor.web3.PublicKey;
+  let poolPda: anchor.web3.PublicKey;
 
-    // --- 1. TEST `initialize_pool` ---
-    it("Initializes a new liquidity pool", async () => {
-        // Create the mint accounts for the two tokens.
-        await createMint(provider.connection, payer.payer, payer.publicKey, null, 6, mintA_KP);
-        await createMint(provider.connection, payer.payer, payer.publicKey, null, 6, mintB_KP);
+  // --- 1. TEST `initialize_pool` ---
+  it("Initializes a new liquidity pool", async () => {
+    // Create the mint accounts for the two tokens.
+    await createMint(
+      provider.connection,
+      payer.payer,
+      payer.publicKey,
+      null,
+      6,
+      mintA_KP
+    );
+    await createMint(
+      provider.connection,
+      payer.payer,
+      payer.publicKey,
+      null,
+      6,
+      mintB_KP
+    );
 
-        [poolPda] = anchor.web3.PublicKey.findProgramAddressSync(
-            [Buffer.from("pool"), mintA.toBuffer(), mintB.toBuffer()],
-            program.programId
-        );
-        const [lpMintPda] = anchor.web3.PublicKey.findProgramAddressSync(
-            [Buffer.from("lp_mint"), mintA.toBuffer(), mintB.toBuffer()],
-            program.programId
-        );
+    [poolPda] = anchor.web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("pool"), mintA.toBuffer(), mintB.toBuffer()],
+      program.programId
+    );
+    const [lpMintPda] = anchor.web3.PublicKey.findProgramAddressSync(
+      [Buffer.from("lp_mint"), mintA.toBuffer(), mintB.toBuffer()],
+      program.programId
+    );
 
-        const tokenVaultA_KP = anchor.web3.Keypair.generate();
-        const tokenVaultB_KP = anchor.web3.Keypair.generate();
+    const tokenVaultA_KP = anchor.web3.Keypair.generate();
+    const tokenVaultB_KP = anchor.web3.Keypair.generate();
 
-        await program.methods
-            .initializePool()
-            .accounts({
-                pool: poolPda,
-                mintA: mintA,
-                mintB: mintB,
-                lpMint: lpMintPda,
-                tokenVaultA: tokenVaultA_KP.publicKey,
-                tokenVaultB: tokenVaultB_KP.publicKey,
-                payer: payer.publicKey,
-                tokenProgram: TOKEN_PROGRAM_ID,
-                systemProgram: anchor.web3.SystemProgram.programId,
-            })
-            .signers([tokenVaultA_KP, tokenVaultB_KP])
-            .rpc();
+    await program.methods
+      .initializePool()
+      .accounts({
+        pool: poolPda,
+        mintA: mintA,
+        mintB: mintB,
+        lpMint: lpMintPda,
+        tokenVaultA: tokenVaultA_KP.publicKey,
+        tokenVaultB: tokenVaultB_KP.publicKey,
+        payer: payer.publicKey,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      })
+      .signers([tokenVaultA_KP, tokenVaultB_KP])
+      .rpc();
 
-        const poolAccount = await program.account.pool.fetch(poolPda);
-        assert.ok(poolAccount, "Pool account should exist after initialization.");
-    });
+    const poolAccount = await program.account.pool.fetch(poolPda);
+    assert.ok(poolAccount, "Pool account should exist after initialization.");
+  });
 
-    // --- 2. TEST `add_liquidity` (First Depositor) ---
-    it("Adds the initial liquidity to the pool", async () => {
-        // --- Setup ---
-        userTokenAccountA = await createAssociatedTokenAccount(provider.connection, payer.payer, mintA, payer.publicKey);
-        userTokenAccountB = await createAssociatedTokenAccount(provider.connection, payer.payer, mintB, payer.publicKey);
+  // --- 2. TEST `add_liquidity` (First Depositor) ---
+  it("Adds the initial liquidity to the pool", async () => {
+    // --- Setup ---
+    userTokenAccountA = await createAssociatedTokenAccount(
+      provider.connection,
+      payer.payer,
+      mintA,
+      payer.publicKey
+    );
+    userTokenAccountB = await createAssociatedTokenAccount(
+      provider.connection,
+      payer.payer,
+      mintB,
+      payer.publicKey
+    );
 
-        await mintTo(provider.connection, payer.payer, mintA, userTokenAccountA, payer.payer, 200_000_000); // 200 Token A
-        await mintTo(provider.connection, payer.payer, mintB, userTokenAccountB, payer.payer, 200_000_000); // 200 Token B
+    await mintTo(
+      provider.connection,
+      payer.payer,
+      mintA,
+      userTokenAccountA,
+      payer.payer,
+      200_000_000
+    ); // 200 Token A
+    await mintTo(
+      provider.connection,
+      payer.payer,
+      mintB,
+      userTokenAccountB,
+      payer.payer,
+      200_000_000
+    ); // 200 Token B
 
-        const amountA = new anchor.BN(100_000_000); // Deposit 100 tokens A
-        const amountB = new anchor.BN(100_000_000); // Deposit 100 tokens B
+    const amountA = new anchor.BN(100_000_000); // Deposit 100 tokens A
+    const amountB = new anchor.BN(100_000_000); // Deposit 100 tokens B
 
-        const poolAccount = await program.account.pool.fetch(poolPda);
-        const userLpTokenAccount = await getAssociatedTokenAddress(poolAccount.lpMint, payer.publicKey);
+    const poolAccount = await program.account.pool.fetch(poolPda);
+    const userLpTokenAccount = await getAssociatedTokenAddress(
+      poolAccount.lpMint,
+      payer.publicKey
+    );
 
-        // --- Action ---
-        await program.methods.addLiquidity(amountA, amountB).accounts({
-            pool: poolPda,
-            mintA: poolAccount.mintA,
-            mintB: poolAccount.mintB,
-            tokenVaultA: poolAccount.tokenVaultA,
-            tokenVaultB: poolAccount.tokenVaultB,
-            lpMint: poolAccount.lpMint,
-            user: payer.publicKey,
-            userTokenAccountA: userTokenAccountA,
-            userTokenAccountB: userTokenAccountB,
-            userLpTokenAccount: userLpTokenAccount,
-            tokenProgram: TOKEN_PROGRAM_ID,
-            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-            systemProgram: anchor.web3.SystemProgram.programId,
-        }).rpc();
+    // --- Action ---
+    await program.methods
+      .addLiquidity(amountA, amountB)
+      .accounts({
+        pool: poolPda,
+        mintA: poolAccount.mintA,
+        mintB: poolAccount.mintB,
+        tokenVaultA: poolAccount.tokenVaultA,
+        tokenVaultB: poolAccount.tokenVaultB,
+        lpMint: poolAccount.lpMint,
+        user: payer.publicKey,
+        userTokenAccountA: userTokenAccountA,
+        userTokenAccountB: userTokenAccountB,
+        userLpTokenAccount: userLpTokenAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      })
+      .rpc();
 
-        // --- Assertions ---
-        const userLp_after = await getAccount(provider.connection, userLpTokenAccount);
-        // Expected LP tokens = sqrt(100e6 * 100e6) = 100e6
-        const expectedLpAmount = new anchor.BN(100_000_000);
-        assert.ok(new anchor.BN(userLp_after.amount).eq(expectedLpAmount), `LP amount should be ${expectedLpAmount}`);
-    });
+    // --- Assertions ---
+    const userLp_after = await getAccount(
+      provider.connection,
+      userLpTokenAccount
+    );
+    // Expected LP tokens = sqrt(100e6 * 100e6) = 100e6
+    const expectedLpAmount = new anchor.BN(100_000_000);
+    assert.ok(
+      new anchor.BN(userLp_after.amount).eq(expectedLpAmount),
+      `LP amount should be ${expectedLpAmount}`
+    );
+  });
 
-    // --- 3. TEST `add_liquidity` (Second Depositor) ---
-    it("Adds more liquidity, respecting the pool ratio", async () => {
-        // --- Setup ---
-        // Pool now has 100 A and 100 B, so the ratio is 1:1.
-        // We will deposit 50 A and 50 B.
-        const amountA = new anchor.BN(50_000_000); // 50 tokens A
-        const amountB = new anchor.BN(50_000_000); // 50 tokens B
+  // --- 3. TEST `add_liquidity` (Second Depositor) ---
+  it("Adds more liquidity, respecting the pool ratio", async () => {
+    // --- Setup ---
+    // Pool now has 100 A and 100 B, so the ratio is 1:1.
+    // We will deposit 50 A and 50 B.
+    const amountA = new anchor.BN(50_000_000); // 50 tokens A
+    const amountB = new anchor.BN(50_000_000); // 50 tokens B
 
-        const poolAccount = await program.account.pool.fetch(poolPda);
-        const userLpTokenAccount = await getAssociatedTokenAddress(poolAccount.lpMint, payer.publicKey);
+    const poolAccount = await program.account.pool.fetch(poolPda);
+    const userLpTokenAccount = await getAssociatedTokenAddress(
+      poolAccount.lpMint,
+      payer.publicKey
+    );
 
-        // --- Action ---
-        await program.methods.addLiquidity(amountA, amountB).accounts({
-            pool: poolPda,
-            mintA: poolAccount.mintA,
-            mintB: poolAccount.mintB,
-            tokenVaultA: poolAccount.tokenVaultA,
-            tokenVaultB: poolAccount.tokenVaultB,
-            lpMint: poolAccount.lpMint,
-            user: payer.publicKey,
-            userTokenAccountA: userTokenAccountA,
-            userTokenAccountB: userTokenAccountB,
-            userLpTokenAccount: userLpTokenAccount,
-            tokenProgram: TOKEN_PROGRAM_ID,
-            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-            systemProgram: anchor.web3.SystemProgram.programId,
-        }).rpc();
+    // --- Action ---
+    await program.methods
+      .addLiquidity(amountA, amountB)
+      .accounts({
+        pool: poolPda,
+        mintA: poolAccount.mintA,
+        mintB: poolAccount.mintB,
+        tokenVaultA: poolAccount.tokenVaultA,
+        tokenVaultB: poolAccount.tokenVaultB,
+        lpMint: poolAccount.lpMint,
+        user: payer.publicKey,
+        userTokenAccountA: userTokenAccountA,
+        userTokenAccountB: userTokenAccountB,
+        userLpTokenAccount: userLpTokenAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      })
+      .rpc();
 
-        // --- Assertions ---
-        // Vaults had 100 A and 100 B. Now they should have 150 A and 150 B.
-        const vaultA_after = await getAccount(provider.connection, poolAccount.tokenVaultA);
-        const vaultB_after = await getAccount(provider.connection, poolAccount.tokenVaultB);
-        assert.equal(Number(vaultA_after.amount), 150_000_000);
-        assert.equal(Number(vaultB_after.amount), 150_000_000);
+    // --- Assertions ---
+    // Vaults had 100 A and 100 B. Now they should have 150 A and 150 B.
+    const vaultA_after = await getAccount(
+      provider.connection,
+      poolAccount.tokenVaultA
+    );
+    const vaultB_after = await getAccount(
+      provider.connection,
+      poolAccount.tokenVaultB
+    );
+    assert.equal(Number(vaultA_after.amount), 150_000_000);
+    assert.equal(Number(vaultB_after.amount), 150_000_000);
 
-        const userLp_after = await getAccount(provider.connection, userLpTokenAccount);
-        // Previous LP total = 100e6.
-        // LP to mint = amount_a * lp_supply / vault_a_balance = 50e6 * 100e6 / 100e6 = 50e6.
-        // Total user LP = 100e6 (from first deposit) + 50e6 (from second) = 150e6.
-        const expectedLpTotal = new anchor.BN(150_000_000);
-        assert.ok(new anchor.BN(userLp_after.amount).eq(expectedLpTotal), `Total LP should be ${expectedLpTotal}`);
-    });
+    const userLp_after = await getAccount(
+      provider.connection,
+      userLpTokenAccount
+    );
+    // Previous LP total = 100e6.
+    // LP to mint = amount_a * lp_supply / vault_a_balance = 50e6 * 100e6 / 100e6 = 50e6.
+    // Total user LP = 100e6 (from first deposit) + 50e6 (from second) = 150e6.
+    const expectedLpTotal = new anchor.BN(150_000_000);
+    assert.ok(
+      new anchor.BN(userLp_after.amount).eq(expectedLpTotal),
+      `Total LP should be ${expectedLpTotal}`
+    );
+  });
+
+  // --- 4. TEST `remove_liquidity` (Withdraw Proportional Share) ---
+  it("Removes liquidity and returns proportional token amounts", async () => {
+    // --- Setup ---
+    const poolAccount = await program.account.pool.fetch(poolPda);
+    const userLpTokenAccount = await getAssociatedTokenAddress(
+      poolAccount.lpMint,
+      payer.publicKey
+    );
+
+    // The pool currently has 150 A and 150 B, LP supply = 150e6.
+    // We will burn 50e6 LP tokens (1/3 of supply), expecting 50 A and 50 B out.
+
+    const lpToBurn = new anchor.BN(50_000_000);
+
+    const vaultA_before = await getAccount(
+      provider.connection,
+      poolAccount.tokenVaultA
+    );
+    const vaultB_before = await getAccount(
+      provider.connection,
+      poolAccount.tokenVaultB
+    );
+    const userA_before = await getAccount(
+      provider.connection,
+      userTokenAccountA
+    );
+    const userB_before = await getAccount(
+      provider.connection,
+      userTokenAccountB
+    );
+    const userLp_before = await getAccount(
+      provider.connection,
+      userLpTokenAccount
+    );
+
+    // --- Action ---
+    await program.methods
+      .removeLiquidity(lpToBurn)
+      .accountsStrict({
+        pool: poolPda,
+        mintA: poolAccount.mintA,
+        mintB: poolAccount.mintB,
+        tokenVaultA: poolAccount.tokenVaultA,
+        tokenVaultB: poolAccount.tokenVaultB,
+        lpMint: poolAccount.lpMint,
+        user: payer.publicKey,
+        userTokenAccountA: userTokenAccountA,
+        userTokenAccountB: userTokenAccountB,
+        userLpTokenAccount: userLpTokenAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      })
+      .rpc();
+
+    // --- Assertions ---
+    const vaultA_after = await getAccount(
+      provider.connection,
+      poolAccount.tokenVaultA
+    );
+    const vaultB_after = await getAccount(
+      provider.connection,
+      poolAccount.tokenVaultB
+    );
+    const userA_after = await getAccount(
+      provider.connection,
+      userTokenAccountA
+    );
+    const userB_after = await getAccount(
+      provider.connection,
+      userTokenAccountB
+    );
+    const userLp_after = await getAccount(
+      provider.connection,
+      userLpTokenAccount
+    );
+
+    // Expected vault decrease
+    assert.equal(
+      Number(vaultA_after.amount),
+      Number(vaultA_before.amount) - 50_000_000,
+      "Vault A should decrease by 50 tokens"
+    );
+    assert.equal(
+      Number(vaultB_after.amount),
+      Number(vaultB_before.amount) - 50_000_000,
+      "Vault B should decrease by 50 tokens"
+    );
+
+    // Expected user token increase
+    assert.equal(
+      Number(userA_after.amount),
+      Number(userA_before.amount) + 50_000_000,
+      "User token A should increase by 50 tokens"
+    );
+    assert.equal(
+      Number(userB_after.amount),
+      Number(userB_before.amount) + 50_000_000,
+      "User token B should increase by 50 tokens"
+    );
+
+    // Expected LP token decrease
+    assert.equal(
+      Number(userLp_after.amount),
+      Number(userLp_before.amount) - 50_000_000,
+      "User LP tokens should decrease by burned amount"
+    );
+  });
 });
