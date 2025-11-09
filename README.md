@@ -252,36 +252,3 @@ For swaps:
 ```
 amount_out = (reserve_out × amount_in_after_fee) / (reserve_in + amount_in_after_fee)
 ```
-
-## 🤝 Contributing
-
-Contributions are welcome! Please follow these guidelines:
-
-1. Fork the repository
-2. Create a feature branch
-3. Write tests for new functionality
-4. Ensure all tests pass
-5. Submit a pull request
-
-## 📄 License
-
-ISC License
-
-## 🔗 Resources
-
-- [Anchor Documentation](https://www.anchor-lang.com/)
-- [Solana Documentation](https://docs.solana.com/)
-- [SPL Token Program](https://spl.solana.com/token)
-- [Uniswap V2 Whitepaper](https://uniswap.org/whitepaper.pdf)
-
-## ⚠️ Disclaimer
-
-This project is for educational purposes. It has not been audited and should not be used in production without proper security review and testing.
-
-## 📞 Support
-
-For questions and support, please open an issue in the repository.
-
----
-
-Built with ❤️ using Anchor and Solana
