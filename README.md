@@ -1,6 +1,6 @@
 # Encode T8 DEX
 
-An educational decentralized exchange (DEX) project built on Solana using the Anchor framework for the Encode Bootcamp. This project implements an automated market maker (AMM) with constant product formula (x * y = k), similar to Uniswap V2.
+An educational decentralized exchange (DEX) project built on Solana using the Anchor framework for the Encode Bootcamp. This project implements an automated market maker (AMM) with constant product formula (x \* y = k), similar to Uniswap V2.
 
 ## 🌟 Features
 
@@ -26,13 +26,16 @@ An educational decentralized exchange (DEX) project built on Solana using the An
 ### Core Components
 
 #### Pool State
+
 The pool stores essential information about the liquidity pool:
+
 - Token A and Token B mint addresses
 - Vault addresses for holding tokens
 - LP (Liquidity Provider) token mint
 - PDA bump seed for secure signing
 
 #### Instructions
+
 1. **Initialize Pool**: Sets up a new liquidity pool
 2. **Add Liquidity**: Deposits tokens and mints LP tokens
 3. **Remove Liquidity**: Burns LP tokens and withdraws proportional amounts
@@ -62,6 +65,11 @@ encode_t8_dex/
     └── deploy.ts                         # Deployment script
 ```
 
+## Test Video
+
+![Token Info](./assets/test-video.mov)
+_Video showing the amm test_
+
 ## 🛠️ Installation
 
 ### Prerequisites
@@ -75,22 +83,26 @@ encode_t8_dex/
 ### Setup
 
 1. **Clone the repository**
+
 ```bash
 git clone https://github.com/encodeclub/encode_t8_dex.git
 cd encode_t8_dex
 ```
 
 2. **Install dependencies**
+
 ```bash
 yarn install
 ```
 
 3. **Build the program**
+
 ```bash
 anchor build
 ```
 
 4. **Deploy the program (optional - for local deployment)**
+
 ```bash
 # Configure Solana for local development
 solana config set --url localhost
@@ -121,6 +133,7 @@ yarn run ts-mocha -p ./tsconfig.json -t 1000000 "tests/**/*.ts"
 ### Test Coverage
 
 The test suite includes:
+
 - Pool initialization
 - Initial liquidity provision (first depositor)
 - Subsequent liquidity provision (ratio checking)
@@ -134,6 +147,7 @@ The test suite includes:
 Creates a new liquidity pool for a token pair.
 
 **Accounts:**
+
 - `pool`: Pool PDA account (created)
 - `lp_mint`: LP token mint PDA (created)
 - `mint_a`: First token mint
@@ -145,6 +159,7 @@ Creates a new liquidity pool for a token pair.
 - `system_program`: System program
 
 **Seeds:**
+
 - Pool PDA: `["pool", mint_a, mint_b]`
 - LP Mint PDA: `["lp_mint", mint_a, mint_b]`
 
@@ -153,16 +168,19 @@ Creates a new liquidity pool for a token pair.
 Deposits tokens into the pool and receives LP tokens.
 
 **Parameters:**
+
 - `amount_a`: Amount of token A to deposit
 - `amount_b`: Amount of token B to deposit
 
 **Logic:**
+
 - **First deposit**: LP tokens = √(amount_a × amount_b)
 - **Subsequent deposits**: Enforces ratio matching
   - `required_b = amount_a × vault_b / vault_a`
   - `lp_to_mint = amount_a × lp_supply / vault_a`
 
 **Validations:**
+
 - Non-zero amounts
 - Correct ratio (for existing pools)
 
@@ -171,13 +189,16 @@ Deposits tokens into the pool and receives LP tokens.
 Burns LP tokens to withdraw proportional amounts of both tokens.
 
 **Parameters:**
+
 - `lp_amount`: Amount of LP tokens to burn
 
 **Logic:**
+
 - `amount_a = lp_amount × vault_a / lp_supply`
 - `amount_b = lp_amount × vault_b / lp_supply`
 
 **Validations:**
+
 - Non-zero LP amount
 - Sufficient LP tokens
 - Non-zero withdrawal amounts
@@ -187,14 +208,17 @@ Burns LP tokens to withdraw proportional amounts of both tokens.
 Exchanges one token for another using the constant product formula.
 
 **Parameters:**
+
 - `amount_in`: Amount of input token
 - `min_amount_out`: Minimum acceptable output (slippage protection)
 
 **Logic:**
+
 - Fee: 0.1% (1/1000) of input amount
 - Formula: `amount_out = (vault_out × amount_in_after_fee) / (vault_in + amount_in_after_fee)`
 
 **Validations:**
+
 - Non-zero input amount
 - Slippage check (output ≥ min_amount_out)
 
@@ -203,6 +227,7 @@ Exchanges one token for another using the constant product formula.
 ### Error Handling
 
 Custom error codes with descriptive messages:
+
 - `ZeroAmount`: Prevents zero-value operations
 - `InvalidRatio`: Ensures deposits maintain pool ratio
 - `InsufficientLiquidity`: Guards against empty pool operations
@@ -244,11 +269,13 @@ Custom error codes with descriptive messages:
 The AMM uses the formula: `x × y = k`
 
 Where:
+
 - `x` = Token A reserves
 - `y` = Token B reserves
 - `k` = Constant product
 
 For swaps:
+
 ```
 amount_out = (reserve_out × amount_in_after_fee) / (reserve_in + amount_in_after_fee)
 ```
