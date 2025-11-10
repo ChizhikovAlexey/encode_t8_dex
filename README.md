@@ -67,7 +67,11 @@ encode_t8_dex/
 
 ## Test Video
 
-![Token Info](./assets/test-video.mov)
+<video width="640" height="360" controls>
+  <source src="./assets/test-video.mov" type="video/quicktime">
+  Your browser does not support the video tag.
+</video>
+
 _Video showing the amm test_
 
 ## 🛠️ Installation
