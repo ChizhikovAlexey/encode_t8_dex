@@ -67,10 +67,8 @@ encode_t8_dex/
 
 ## Test Video
 
-<video width="640" height="360" controls>
-  <source src="./assets/test-video.mov" type="video/quicktime">
-  Your browser does not support the video tag.
-</video>
+
+https://github.com/user-attachments/assets/e94b3c6a-133d-49b2-abe1-7bb0bb26f419
 
 _Video showing the amm test_
 
